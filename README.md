@@ -1,2 +1,117 @@
 # PyHLSearch_Beam
-HLSearchにビームサーチ追加
+HLSearchの素数シフト探索にビームサーチを適用したPythonプログラムです。
+`HLSearch_Beam.py` は、import可能なモジュールとコマンドラインプログラムを兼ねています。
+
+## 必要環境
+
+- Python 3.13以降
+- NumPy
+- tqdm
+- CUDAを使う場合: CUDA Toolkitに対応したCuPy
+
+CPU版の依存パッケージをインストールします。
+
+```bat
+python -m pip install numpy tqdm
+```
+
+CUDA版を使う場合は、CUDA Toolkitのバージョンに合うCuPyを追加します。
+たとえばCUDA 12.xでは次のようにインストールします。
+
+```bat
+python -m pip install cupy-cuda12x
+```
+
+CUDA 11.xなど別のバージョンを使用する場合は、CuPy公式の対応表に
+従ってパッケージ名を選択してください。
+
+## 基本実行
+
+```bat
+python HLSearch_Beam.py --depth 10 --beam-width 5000
+```
+
+主なオプション:
+
+| オプション | 説明 |
+| --- | --- |
+| `--depth N` | 探索する階層数 |
+| `--max-depth N` | `--target`による追加条件を有効にする深さ |
+| `--target N` | 対象とする残存数 |
+| `--beam-width N` | 次の階層へ渡す候補数の上限。`--beam-max-candidates` の互換オプション |
+| `--beam-top-k N` | 残存数が上位 N 位までの候補を次の階層へ渡す。同順位はすべて対象 |
+| `--beam-max-candidates N` | 次の階層へ渡す候補数の上限 |
+| `--primes-count N` | 使用する素数の個数 |
+| `--cols N` | 探索対象の列数 |
+| `--output PATH` | シフト経路の出力先 |
+| `--mininterval SECONDS` | tqdm進捗表示の最短更新間隔 |
+| `--log-level LEVEL` | コンソールログレベル（`DEBUG`、`INFO`、`WARNING`、`ERROR`） |
+| `--checkpoint PATH` | 探索途中のチェックポイント保存先 |
+| `--resume PATH` | 保存済みチェックポイントから再開 |
+| `--backend {cpu,cuda}` | 探索バックエンド（既定値: `cpu`）。`cuda`はCuPyが必要 |
+| `--benchmark` | 小規模CPUベンチマークを実行して終了 |
+| `--benchmark-repeats N` | CPUベンチマークの反復回数 |
+
+小規模な動作確認:
+
+```bat
+python HLSearch_Beam.py --depth 2 --primes-count 2 --cols 6 ^
+  --max-depth 2 --target 2 ^
+  --beam-width 6
+```
+
+## 出力
+
+`--output`で指定したファイルには、次の形式で結果が保存されます。
+
+```text
+max_count:...
+results:...
+[shift0, shift1, ...]
+```
+
+ログはコンソールと`HLSearch_Beam.log`に出力されます。チェックポイントを指定すると、
+探索状態をJSON形式で保存できます。保存中の異常終了で既存ファイルを壊さないよう、
+一時ファイル経由で置き換えます。
+
+## 探索と高速化
+
+各階層で候補を評価し、残存数の値が上位 `--beam-top-k` 位までの候補を
+次の階層へ渡します。同順位の候補はすべて対象ですが、候補数が
+`--beam-width`（または既存の`--beam-max-candidates`）を超える場合は、残存数の降順・シフト経路の辞書順で
+上限までに絞ります。これらの値を小さくすると高速になりますが、探索対象が絞られるため、
+完全探索とは異なる結果になる場合があります。最適解の完全性が必要な場合は、
+ビーム選択と枝刈り条件の影響を考慮してください。
+
+探索処理では次の最適化を使用しています。
+
+- マスクを`uint64`へビットパックし、メモリ使用量を削減
+- 候補シフトを一括AND・popcountで評価
+- 残存数の順位と候補上限によるビーム選択
+- シフトテーブルをNumPyで一括生成
+- 進捗表示とチェックポイント判定の頻度を抑制
+
+`--backend cuda`を指定すると、シフトテーブルをGPUへ転送し、候補のAND演算と
+popcountをCuPyでバッチ処理します。ビームの並べ替えやチェックポイントの
+シリアライズはCPU側で行います。CUDA対応GPUまたは対応するCuPyが利用できない
+環境では実行できません。
+
+```bat
+python HLSearch_Beam.py --backend cuda --depth 10 --beam-width 5000
+```
+
+CPU性能を測定するには、検索と同じCLIから小規模ベンチマークを実行できます。
+ベンチマークは常にCPUバックエンドで実行され、結果はJSONで標準出力に表示されます。
+`elapsed_seconds`は全反復の合計時間、`nodes_per_second`は全反復の平均処理速度です。
+
+```bat
+python HLSearch_Beam.py --benchmark --depth 6 --primes-count 6 ^
+  --cols 1024 --beam-width 64 ^
+  --benchmark-repeats 3
+```
+
+## テスト
+
+```bat
+python -m pytest
+```
