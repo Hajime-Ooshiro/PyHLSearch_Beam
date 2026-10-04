@@ -869,6 +869,7 @@ if __name__ == "__main__":
     out_path = Path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as f:
+        f.write(f"beam_width:{result_state.beam_width}\n")
         f.write(f"max_count:{result_state.max_count}\n")
         f.write(f"results:{result_state.results}\n")
         for shift in result_state.shifts:
