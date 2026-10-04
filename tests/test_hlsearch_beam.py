@@ -83,10 +83,6 @@ def test_parse_args_applies_cli_overrides():
         [
             "--depth",
             "2",
-            "--max-depth",
-            "4",
-            "--target",
-            "5",
             "--beam-width",
             "6",
             "--primes-count",
@@ -108,8 +104,6 @@ def test_parse_args_applies_cli_overrides():
 
     assert vars(args) == {
         "depth": 2,
-        "max_depth": 4,
-        "target": 5,
         "beam_width": 6,
         "primes_count": 7,
         "cols": 8,
@@ -121,17 +115,16 @@ def test_parse_args_applies_cli_overrides():
     }
 
 
-def test_parse_args_rejects_removed_limit_option():
+@pytest.mark.parametrize("option", ["--limit", "--max-depth", "--target"])
+def test_parse_args_rejects_removed_options(option):
     with pytest.raises(SystemExit):
-        parse_args(["--limit", "0"])
+        parse_args([option, "0"])
 
 
 def make_small_config(**overrides):
     values = {
         "primes": [2, 3],
         "depth": 2,
-        "max_depth": 2,
-        "target": 2,
         "cols": 6,
         "beam_width": 6,
         "progress_mininterval": 0,

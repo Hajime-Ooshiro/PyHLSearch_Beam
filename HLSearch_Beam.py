@@ -25,6 +25,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from datetime import datetime
 
 import numpy as np
 from numpy.typing import NDArray
@@ -62,10 +63,7 @@ class SearchConfig:
 
     Attributes:
         primes: 探索対象の素数リスト。デフォルトでは 1579 以下の素数を生成する。
-        nums: 探索キーのリスト。
         depth: 深さとして使う素数の数。
-        max_depth: 深さの上限。
-        target: `depth == max_depth` のときの打ち切り目標値.
         cols: 列数。
         progress_mininterval: tqdm の最短更新間隔。
         postfix_update_interval: postfix 更新の頻度。
@@ -76,38 +74,10 @@ class SearchConfig:
         backend: 探索バックエンド(`cpu`または`cuda`).
     """
     primes: list[int] = field(default_factory=lambda: generate_primes(1579))
-    nums: list[list[int]] = field(default_factory=lambda: [
-        [1], 
-        [i for i in range(3)], 
-        [i for i in range(5)], 
-        [i for i in range(7)], 
-        [i for i in range(11)], 
-        [i for i in range(13)], 
-        [i for i in range(17)], 
-        [i for i in range(19)], 
-        [i for i in range(23)], 
-        [i for i in range(29)], # 2, 3, 5, 7, 11, 13, 17, 19, 23, 29
-        31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 
-        73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 
-        127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 
-        179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 
-        233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 
-        283, 293, 307, 311, 313, 317, 331, 337, 347, 349,
-        353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 
-        419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479,
-        487, 491, 499, 503, 509, 521, 523, 541, 547, 557, 563, 569, 571, 577, 587, 593, 599, 601, 607, 613, 617, 619, 631, 641, 643, 647, 653, 659, 661, 673, 677, 683, 691, 701, 709,
-        719, 727, 733, 739, 743, 751, 757, 761, 769, 773, 787, 797, 809, 811, 821, 823, 827, 829, 839, 853, 857, 859, 863, 877, 881, 883, 887, 907, 911, 919, 929, 937, 941, 947, 953, 967,
-        971, 977, 983, 991, 997, 1009, 1013, 1019, 1021, 1031, 1033, 1039, 1049, 1051, 1061, 1063, 1069, 1087, 1091, 1093, 1097, 1103, 1109, 1117, 1123, 1129, 1151, 1153, 1163, 1171, 1181, 1187, 1193, 1201, 1213, 1217, 1223, 1229, 1231, 1237, 1249,
-        1259, 1277, 1279, 1283, 1289, 1291, 1297, 1301, 1303, 1307, 1319, 1321, 1327, 1361, 1367, 1373, 1381, 1399, 1409, 1423, 1427, 1429, 1433, 1439, 1447, 
-        1451, 1453, 1459, 1471, 1481, 1483, 1487, 1489, 1493, 1499, 1511, 1513, 1517, 1523, 1531, 1543, 1549, 1553, 1559, 1567, 1571, 1579
-    ])
     depth: int = 8
-    max_depth: int = 249
-    target: int = 447
     cols: int = 3159
     progress_mininterval: float = 1.0
     postfix_update_interval: int = 10000
-    shift_path_file: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shift_path.txt")
     beam_width: int | None = None
     beam_top_k: int = 2
     beam_max_candidates: int = 5000
@@ -147,7 +117,9 @@ class SearchConfig:
             )
 
 cfg = SearchConfig()
-shift_path_file: str = cfg.shift_path_file
+base_dir = os.path.dirname(os.path.abspath(__file__))
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+shift_path_file: str = os.path.join(base_dir, f"shift_path_depth{cfg.depth}_{timestamp}.txt")
 
 # --- logging設定 ---
 logger = logging.getLogger(__name__)
@@ -181,13 +153,6 @@ def setup_logging(base_dir: str | os.PathLike[str], console_level: str="INFO") -
     logger.info(f"ログファイルを作成しました: {log_path}")
     return log_path
 
-
-# COLS: int = cfg.cols
-# DEPTH: int = cfg.depth
-# MAX_DEPTH: int = cfg.max_depth
-# TARGET: int = cfg.target
-# PROGRESS_MININTERVAL: float = cfg.progress_mininterval  # tqdm進捗表示の最短更新間隔(秒)
-# POSTFIX_UPDATE_INTERVAL: int = cfg.postfix_update_interval
 
 # 2,3,5,7,11,13,...,1579 の素数リスト
 PRIMES: list[int] = generate_primes(1579)
@@ -298,8 +263,6 @@ class State:
         "primes",
         "shift_table",
         "zero_mask",
-        "max_depth",
-        "target",
         "beam_width",
         "beam_top_k",
         "beam_max_candidates",
@@ -319,22 +282,18 @@ class State:
         "_word_count",
     )
 
-    def __init__(self, config: SearchConfig | Sequence[int], shift_table: list[NDArray[np.bool_]], max_depth: int | None = None, target: int | None = None, checkpoint_path: str | os.PathLike[str] | None = None, checkpoint_interval: int = 1000) -> None:
+    def __init__(self, config: SearchConfig | Sequence[int], shift_table: list[NDArray[np.bool_]], checkpoint_path: str | os.PathLike[str] | None = None, checkpoint_interval: int = 1000) -> None:
         # SearchConfig 以外(生の primes 列)が渡された場合は、まず SearchConfig に
         # 正規化してしまう。これにより以降の属性代入を両ケースで共通化でき、
-        # max_depth/target の決定ロジックを二重に書かずに済む。
+        # 設定値の決定ロジックを二重に書かずに済む。
         if not isinstance(config, SearchConfig):
             config = SearchConfig(
                 primes=config,
                 depth=len(config),
-                max_depth=cfg.max_depth if max_depth is None else max_depth,
-                target=cfg.target if target is None else target,
                 cols=cfg.cols,
             )
         self.config = config
         primes = config.primes
-        self.max_depth = config.max_depth if max_depth is None else max_depth
-        self.target = config.target if target is None else target
         self.beam_width = config.beam_width
         self.beam_top_k = config.beam_top_k
         self.beam_max_candidates = config.beam_max_candidates
@@ -636,14 +595,16 @@ class State:
             self._beam_level = level + 1
             if level + 1 == depth:
                 for key, _, count in frontier:
-                    if count == self.target:
-                        message = f"target depth={depth} key={key} count={count}"
+                    if count > self.max_count:
+                        self.max_count = count
+                        self.shifts = [list(key)]
+                        self.results = 1
+                        message = f"best depth={depth} key={key} count={count}"
                         self.pbar.write(message)
                         logger.info(message)
-                        self.results += 1
-                    if not (depth == self.max_depth and count > self.target):
-                        self.max_count = max(self.max_count, count)
+                    elif count == self.max_count:
                         self.shifts.append(list(key))
+                        self.results += 1
             if not frontier:
                 break
 
@@ -700,17 +661,15 @@ class State:
                     continue
 
                 if level + 1 >= depth:
-                    if count == self.target:
-                        message = f"target depth={depth} key={list(key)} count={count}"
+                    if count > self.max_count:
+                        self.max_count = count
+                        self.shifts = [list(key)]
+                        self.results = 1
+                        message = f"best depth={depth} key={list(key)} count={count}"
                         self.pbar.write(message)
-                        logger.info(message)  # ログファイルにも残す(pbar.writeだけだと画面にしか出ない)
+                        logger.info(message)
+                    elif count == self.max_count:
                         self.results += 1
-
-                    if not (depth == self.max_depth and count > self.target):
-                        if count > self.max_count:
-                            self.max_count = count
-                        elif count == self.max_count:
-                            pass
                         self.shifts.append(list(key))
 
                     key.pop()
@@ -764,8 +723,6 @@ def benchmark_cpu(
     config = SearchConfig(
         primes=primes,
         depth=depth,
-        max_depth=depth + 1,
-        target=0,
         cols=cols,
         beam_width=beam_width,
         beam_top_k=beam_top_k,
@@ -816,10 +773,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("-d", "--depth", type=int, default=cfg.depth,
                         help="探索する階層数(使用する素数の個数)。primesの長さ以下である必要がある。")
-    parser.add_argument("--max-depth", type=int, default=cfg.max_depth,
-                        help="depthがこの値と一致するとき、--targetによる追加打ち切りを有効にする。")
-    parser.add_argument("-t", "--target", type=int, default=cfg.target,
-                        help="depth == max-depth のとき、countがこの値を超えたら結果を採用せず打ち切る。")
     beam_limit_group = parser.add_mutually_exclusive_group()
     beam_limit_group.add_argument("--beam-width", type=int, default=argparse.SUPPRESS,
                                   help="各階層から次の階層へ渡す候補数の上限。")
@@ -875,8 +828,6 @@ if __name__ == "__main__":
     LOG_PATH = setup_logging(base, console_level=args.log_level)
 
     depth = args.depth
-    max_depth = args.max_depth
-    target = args.target
     beam_width = getattr(args, "beam_width", None)
     beam_top_k = getattr(args, "beam_top_k", cfg.beam_top_k)
     beam_max_candidates = getattr(
@@ -892,22 +843,19 @@ if __name__ == "__main__":
     config = SearchConfig(
         primes=primes,
         depth=depth,
-        max_depth=max_depth,
-        target=target,
         beam_width=beam_width,
         beam_top_k=beam_top_k,
         beam_max_candidates=beam_max_candidates,
         cols=cols,
         progress_mininterval=args.mininterval,
         postfix_update_interval=cfg.postfix_update_interval,
-        shift_path_file=output_path,
         backend=backend,
     )
 
     logger.info("HLSearch_Beam 開始 (log file: %s)", LOG_PATH)
     logger.info(
-        "設定: depth=%d max_depth=%d target=%d beam_width=%s beam_top_k=%d beam_max_candidates=%d primes_count=%d backend=%s",
-        depth, max_depth, target, beam_width, beam_top_k,
+        "設定: depth=%d beam_width=%s beam_top_k=%d beam_max_candidates=%d primes_count=%d backend=%s",
+        depth, beam_width, beam_top_k,
         beam_max_candidates, len(primes), backend,
     )
 

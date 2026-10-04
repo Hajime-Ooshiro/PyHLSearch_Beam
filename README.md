@@ -36,8 +36,6 @@ python HLSearch_Beam.py --depth 10 --beam-width 5000
 | オプション | 説明 |
 | --- | --- |
 | `--depth N` | 探索する階層数 |
-| `--max-depth N` | `--target`による追加条件を有効にする深さ |
-| `--target N` | 対象とする残存数 |
 | `--beam-width N` | 次の階層へ渡す候補数の上限。`--beam-max-candidates` の互換オプション |
 | `--beam-top-k N` | 残存数が上位 N 位までの候補を次の階層へ渡す。同順位はすべて対象 |
 | `--beam-max-candidates N` | 次の階層へ渡す候補数の上限 |
@@ -56,7 +54,6 @@ python HLSearch_Beam.py --depth 10 --beam-width 5000
 
 ```bat
 python HLSearch_Beam.py --depth 2 --primes-count 2 --cols 6 ^
-  --max-depth 2 --target 2 ^
   --beam-width 6
 ```
 

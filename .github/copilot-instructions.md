@@ -22,7 +22,7 @@ Run the CLI with a deliberately small search while developing:
 python HLSearch_Beam.py --depth 10 --beam-width 100
 ```
 
-The default configuration is much larger. Use `--help` to inspect all CLI options, including `--limit`, `--max-depth`, `--target`, `--primes-count`, `--cols`, `--output`, `--checkpoint`, and `--resume`.
+The default configuration is much larger. Use `--help` to inspect all CLI options, including `--primes-count`, `--cols`, `--output`, `--checkpoint`, and `--resume`.
 
 Tests are configured by `pytest.ini` to discover `tests/test_*.py`:
 
@@ -41,7 +41,7 @@ There are currently no checked-in tests, so the full pytest command exits with "
 - Search masks are NumPy boolean arrays of length `cols`. Preserve this representation and vectorized operations in performance-sensitive code; avoid converting masks to Python collections in the search loop.
 - A shift at a given level is indexed from `0` through `primes[level] - 1`. `shift_table[level][shift]` is already the complement row, so do not apply another complement during search.
 - Beam pruning is intentional: each level sorts candidates by descending remaining count, then lexicographically by key, and keeps at most `beam_width`. Small beam widths can produce results different from complete search.
-- The `limit` threshold prunes candidates below `max(limit, max_count)`. At the terminal depth, `target` handling is special when `depth == max_depth`; preserve that distinction when modifying pruning or result accounting.
+- The current `max_count` prunes lower-ranked candidates. At the terminal depth, preserve only the paths tied for the highest remaining count.
 - `State.run()` may resume a checkpoint, but a resume must use compatible dimensions and search inputs. Keep `key`, `zero_mask`, `node_count`, results, stack/frontier, and beam level synchronized when adding resumable state.
 - Progress output is handled by `tqdm`; logging goes through the module logger configured by `setup_logging()`. Do not use progress-bar output as a substitute for persistent logging of important results.
 - The CLI writes `max_count:`, `results:`, then one shift path per line to the selected output file. Preserve this simple output format unless the CLI contract is intentionally changed.
