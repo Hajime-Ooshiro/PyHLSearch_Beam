@@ -40,8 +40,6 @@ python HLSearch_Beam.py --depth 10 --beam-width 5000
 | `--beam-top-k N` | 残存数が上位 N 位までの候補を次の階層へ渡す。同順位はすべて対象 |
 | `--beam-max-candidates N` | 次の階層へ渡す候補数の上限 |
 | `--primes-count N` | 使用する素数の個数 |
-| `--cols N` | 探索対象の列数 |
-| `--output PATH` | シフト経路の出力先 |
 | `--mininterval SECONDS` | tqdm進捗表示の最短更新間隔 |
 | `--log-level LEVEL` | コンソールログレベル（`DEBUG`、`INFO`、`WARNING`、`ERROR`） |
 | `--checkpoint PATH` | 探索途中のチェックポイント保存先 |
@@ -53,13 +51,13 @@ python HLSearch_Beam.py --depth 10 --beam-width 5000
 小規模な動作確認:
 
 ```bat
-python HLSearch_Beam.py --depth 2 --primes-count 2 --cols 6 ^
+python HLSearch_Beam.py --depth 2 --primes-count 2 ^
   --beam-width 6
 ```
 
 ## 出力
 
-`--output`で指定したファイルには、次の形式で結果が保存されます。
+実行時に自動生成される `shift_path_depth<depth>_<timestamp>.txt` には、次の形式で結果が保存されます。
 
 ```text
 max_count:...
@@ -103,7 +101,7 @@ CPU性能を測定するには、検索と同じCLIから小規模ベンチマ�
 
 ```bat
 python HLSearch_Beam.py --benchmark --depth 6 --primes-count 6 ^
-  --cols 1024 --beam-width 64 ^
+  --beam-width 64 ^
   --benchmark-repeats 3
 ```
 

@@ -87,10 +87,6 @@ def test_parse_args_applies_cli_overrides():
             "6",
             "--primes-count",
             "7",
-            "--cols",
-            "8",
-            "--output",
-            "result.txt",
             "--mininterval",
             "0.25",
             "--log-level",
@@ -106,8 +102,6 @@ def test_parse_args_applies_cli_overrides():
         "depth": 2,
         "beam_width": 6,
         "primes_count": 7,
-        "cols": 8,
-        "output": "result.txt",
         "mininterval": 0.25,
         "log_level": "DEBUG",
         "checkpoint": "checkpoint.json",
@@ -115,7 +109,9 @@ def test_parse_args_applies_cli_overrides():
     }
 
 
-@pytest.mark.parametrize("option", ["--limit", "--max-depth", "--target"])
+@pytest.mark.parametrize(
+    "option", ["--limit", "--max-depth", "--target", "--cols", "--output"]
+)
 def test_parse_args_rejects_removed_options(option):
     with pytest.raises(SystemExit):
         parse_args([option, "0"])

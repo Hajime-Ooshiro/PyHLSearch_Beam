@@ -67,7 +67,6 @@ class SearchConfig:
         cols: 列数。
         progress_mininterval: tqdm の最短更新間隔。
         postfix_update_interval: postfix 更新の頻度。
-        shift_path_file: 出力ファイルパス.
         beam_width: 次レベルへ渡す候補数の上限。指定時は beam_max_candidates より優先する。
         beam_top_k: 次レベルへ渡す際に採用する count の上位順位数(タイは全て含む)。
         beam_max_candidates: 1レベルあたりに次へ渡す候補数の上限。
@@ -85,8 +84,6 @@ class SearchConfig:
 
     def __post_init__(self) -> None:
         """設定値の整合性を早期に検証する(実行時ではなく構築時に失敗させる)。"""
-        if self.cols <= 0:
-            raise ValueError(f"cols は正の整数である必要があります: cols={self.cols}")
         if self.depth < 0:
             raise ValueError(f"depth は0以上である必要があります: depth={self.depth}")
         if self.depth > len(self.primes):
@@ -119,7 +116,6 @@ class SearchConfig:
 cfg = SearchConfig()
 base_dir = os.path.dirname(os.path.abspath(__file__))
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-shift_path_file: str = os.path.join(base_dir, f"shift_path_depth{cfg.depth}_{timestamp}.txt")
 
 # --- logging設定 ---
 logger = logging.getLogger(__name__)
@@ -782,10 +778,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="各階層でcountの上位何位まで(タイは全て含む)を次の階層へ渡すか。")
     parser.add_argument("-p", "--primes-count", type=int, default=None, metavar="N",
                         help="PRIMESの先頭N個だけを使う(未指定なら全て使用)。")
-    parser.add_argument("--cols", type=int, default=cfg.cols,
-                        help="列数(=探索対象の長さ)。")
-    parser.add_argument("--output", type=str, default=shift_path_file,
-                        help="最適シフトパスの出力先ファイル。")
     parser.add_argument("--mininterval", type=float, default=cfg.progress_mininterval,
                         help="tqdm進捗表示の最短更新間隔(秒)。")
     parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO",
@@ -813,8 +805,8 @@ if __name__ == "__main__":
         benchmark = benchmark_cpu(
             depth=min(args.depth, args.primes_count or args.depth),
             primes_count=args.primes_count or args.depth,
-            cols=args.cols,
-            beam_width=getattr(args, "beam_width", None),
+            cols=cfg.cols,
+            beam_width=getattr(args, "beam_width", cfg.beam_width),
             beam_top_k=getattr(args, "beam_top_k", cfg.beam_top_k),
             beam_max_candidates=getattr(
                 args, "beam_max_candidates", cfg.beam_max_candidates
@@ -828,14 +820,13 @@ if __name__ == "__main__":
     LOG_PATH = setup_logging(base, console_level=args.log_level)
 
     depth = args.depth
-    beam_width = getattr(args, "beam_width", None)
+    beam_width = getattr(args, "beam_width", cfg.beam_width)
     beam_top_k = getattr(args, "beam_top_k", cfg.beam_top_k)
     beam_max_candidates = getattr(
         args, "beam_max_candidates", cfg.beam_max_candidates
     )
-    cols = args.cols
+    cols = cfg.cols
     primes = PRIMES if args.primes_count is None else PRIMES[: args.primes_count]
-    output_path = args.output
 
     if depth > len(primes):
         raise ValueError(f"depth={depth} が使用可能な素数の個数({len(primes)})を超えています")
@@ -866,9 +857,8 @@ if __name__ == "__main__":
     logger.info("最大値: %d", result_state.max_count)
     logger.info("該当件数: %d", result_state.results)
 
-    out_path = Path(output_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w", encoding="utf-8") as f:
+    shift_path_file: str = os.path.join(base_dir, f"shift_path_depth{depth}_{timestamp}.txt")
+    with open(shift_path_file, "w", encoding="utf-8") as f:
         f.write(f"beam_width:{result_state.beam_width}\n")
         f.write(f"max_count:{result_state.max_count}\n")
         f.write(f"results:{result_state.results}\n")
